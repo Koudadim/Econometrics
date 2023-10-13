@@ -1,0 +1,180 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+
+library(forecast)
+
+# 1 Chroniques simulées
+
+## 1.1 MA(2)
+
+#### Xt = ε(t) + 0.4ε(t−1) + 0.7ε(t−2)
+
+
+set.seed(1000) # Pour avoir les memes valeurs que sur toutes les machines
+
+X <- arima.sim(n=200,list(ma=c(0.4,0.7)),sd=.1) # sd:écart-type des ε(t) 
+plot(X, ylab="X", type="o", pch=20)
+X
+```
+
+
+
+```{r}
+### l'acf permet de proposer une moyenne mobile pour modéliser une série temporelle. Elle ne marche pas dans le cas des auto regressifs. Car les MA(q) s'annulent à partir de l'ordre q+1. Ce qui n'est pas le cas pour les AR(q)
+
+Acf(X) 
+acf(X, ci.type="ma")
+```
+```{r}
+### La pacf parmet de faire la proposition d'un auto regressif.
+Pacf(X)
+```
+```{r}
+tsdisplay(X)
+```
+```{r}
+## X(t) ~ ARIMA(p,d,q) <===> (1-L)^d * X(t) ~ ARMA(p,q)
+```
+
+```{r}
+library(caschrono)
+# Estimations deparamètres de la MA(2)
+
+output_X <- Arima(X,order=c(0,0,2))
+summary(output_X)
+
+##### S.e. : écart-type de l'estimateur; permet de tester la significativité des paramètres dont le but est de réduire le nombre de paramètres.
+
+# Test de la significativité des paramètres
+
+
+t_stat(output_X) # du packages caschrono
+
+```
+
+```{r}
+# Test de la significativité des paramètres
+
+
+t_stat(output_X) # du packages caschrono 
+```
+
+```{r}
+## Visualisation des résidus
+
+plot(output_X$residuals, ylab="residus")
+abline(0,0)
+grid()
+```
+```{r}
+### Etude des résidus
+# Nulllité des auto corrélation à partir d'un certain ordre
+
+### H0: rho(1)=...=rho(k)=0 <----> H1: Il existe j<=k tq rho(j) non nul
+
+### p-value > alpha => on accepte H0
+tsdiag(output_X)
+
+```
+```{r}
+## histogramme et QQ-plot des résidus : la répartition est cohérente avec une répartition gaussienne.
+
+hist(residuals(output_X), freq = F, col = "grey")
+curve(dnorm(x, mean = mean(residuals(output_X)),
+sd = sd(residuals(output_X))), col = 2, add = TRUE)
+qqnorm(residuals(output_X))
+qqline(residuals(output_X),col=2)
+```
+
+```{r}
+# Test de normalité des résidus:
+## H0: Les erreurs sont gaussiennes <---> H1: Les erreurs ne sont normales
+
+shapiro.test(residuals(output_X))
+
+## Interprétation: p-value =0.8582 > alpha=0.5; on ne rejette donc pas H0.
+
+
+#jarque.bera.test(residuals(output_X))
+
+```
+
+```{r}
+# ARIMA: Pour un processus de tendance plolynomial
+# X(t) ~ ARIMA(p,d,q) <==> (1-L)^d .X(t) ~ ARMA(p,q); processus intégré.
+
+# Lorsque que je n'ai que l'éxhantillon de taille T=n, les étpaes à suivre:
+## 1. Tracer l'ACF
+##c2. Test de stationnarité (ADR): s'il y stationnarité, on peut alors évaluer les autocorrélation
+
+```
+
+```{r}
+getwd()
+```
+```{r}
+gnp <- read.table("gnp.txt",header=T)
+gnp <- ts(gnp,frequency=4,start=c(1947,1))
+plot(gnp, ylab="gnp", type="o", pch=20)
+```
+
+```{r}
+# Elimination de la tendance
+d1gnp<- diff(gnp)
+
+# Après élimination de la tendance
+
+plot(d1gnp, ylab="gnp", type="o", pch=20)
+
+```
+```{r}
+Acf(d1gnp)
+Pacf(d1gnp)
+tsdisplay(d1gnp)
+```
+```{r}
+# Estimation des paramètres 
+output_gnp <- Arima(gnp,order=c(1,1,1))
+summary(output_gnp)
+```
+
+
+```{r}
+# Test de significativité des paramètres
+t_stat(output_gnp)
+## Autre 
+library('lmtest')
+coeftest(output_gnp)
+```
+
+
+
+```{r}
+plot(output_gnp$residuals, ylab="residus")
+abline(0,0)
+grid()
+
+```
+
+```{r}
+hist(residuals(output_gnp), freq = F, col = "grey")
+curve(dnorm(x, mean = mean(residuals(output_gnp)),
+sd = sd(residuals(output_gnp))), col = 2, add = TRUE)
+qqnorm(residuals(output_gnp))
+qqline(residuals(output_gnp),col=2)
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
