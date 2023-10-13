@@ -1,0 +1,82 @@
+
+###############################################################################
+# Dans ce projet, nous allons modéliser la série de taux d'intérêts i1 de     #
+# 'UKpppuip' au Royaume-Uni                                                   #
+#####################################################################################################
+
+
+
+```{r}
+require(urca)
+data(UKpppuip)
+```
+
+```{r}
+View(UKpppuip)
+```
+
+```{r}
+taux=ts(UKpppuip$i1,start=c(1971,1),frequency=4)
+attach(UKpppuip,warn.conflicts=FALSE)
+plot(taux,type='l',xlab='temps',ylab='taux en %')
+```
+# Cette série ne présente pas de tendance. On peut lui ajuster le modèle suivant:
+# delta X[t] = beta + rho*X[t-1] + sigma(phi[i]*delta X[t-i], i=1,..,p-1) + epsilon[t]
+# Ce modèle présente un drift
+
+# 1. Déterminons d'abord le premier retard significatif p-1
+
+```{r}
+taux.df0 <- ur.df(y=taux, lags = 6, type= 'drift')
+summary(taux.df0)
+```
+
+# Le retard 6 n'est pas significatif
+# Une regression jusqu'au retard 2 montre que les retards 2 à 6 ne sont pas significatifs
+
+```{r}
+taux.df0 <- ur.df(y=taux, lags = 1, type= 'drift')
+summary(taux.df0)
+```
+
+# Le retard 1 est donc significatif
+# De plus, p-value = 0.001893 < 0.05 permet de conclure que le polynôme
+# associée à la série ne présente pas une racine  unitaire
+# D'où la série est bien stationnaire
+
+# Une autre fonction de test de la stationnarité
+
+```{r}
+library(tseries)
+adf.test(taux)
+```
+# alternative hypothesis: stationary. On retrouve le même résultat
+
+###############################################################################
+# Proposons donc un modèle pour modéliser la série de taux d'intérêt          #
+###############################################################################
+
+```{r}
+# La série contient-elle une moyenne mobile?
+acf(X,ci.type="ma")
+```
+# l'acf est significativement nulle pour des h > 2
+# La série contient donc une MA(2)
+
+```{r}
+# La série contient-elle un auto regressif?
+pacf(X)
+```
+# On peut estimer qu'elle contient une AR(1)
+# La série étant stationnaire sans différenciation, peut-on conclure qu'il 
+# d'un ARIMA(1,0,2) ?
+
+```{r}
+library(forecast) # Pour pouvoir utiliser le modèle Arima
+model<- Arima(X,order=c(1,0,2))
+model
+```
+
+
+
+
