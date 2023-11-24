@@ -1,0 +1,239 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+data(AirPassengers)
+ald<-AirPassengers
+ald
+```
+
+
+```{r}
+plot(ald)
+```
+
+```{r}
+require(urca)
+ald.df0=ur.df(y=ald,lags=6,type='trend')
+
+# Les t-statistiques
+ ald.df0@testreg$coefficients
+```
+# 6 n'est pas le premier plus grand retard significatif. On diminue ainsi la valeur du lag jusqu'à l'obtenir.
+
+```{r}
+ald.df0=ur.df(y=ald,lags=5,type='trend')
+
+# Les t-statistiques
+ ald.df0@testreg$coefficients
+```
+
+# 5 est le premier retard significatif pour un seuil de 5%.
+
+```{r}
+summary(ald.df0)
+```
+
+# D'après le test de Dickey-Fuller, la série est intégrée d'ordre 0 avec une tendance. Elle n'est donc pas stationnaire. Il faut donc éliminer la tendance.
+
+# De plus, la série a une variance qui dépend du temps. 
+# Stabilisons cette variance avant de poursuivre...
+
+```{r}
+# Le log de la série brute
+log_ald <- log(x = ald)
+plot(log_ald)
+```
+
+# la série log_ald semble avoir une variance constante... 
+
+# Test d'homocédasticité avec bptest()
+# H0: Homocédastique <-> H1: Hétérocédasticité
+
+```{r}
+library(lmtest)
+
+## generate a regressor
+x <- rep(c(-1,1), length(ald)/2)
+## generate heteroskedastic and homoskedastic disturbances
+err1 <- ald
+err2 <- log_ald
+## generate a linear relationship
+y1 <- 1 + x + err1
+y2 <- 1 + x + err2
+```
+
+
+```{r}
+## perform Breusch-Pagan test
+bptest(y1 ~ x)
+bptest(y2 ~ x)
+```
+##############################################################################
+# INTERPRETATION
+# Si p-value < 5% alors on rejette H0
+# Dans notre cas les p-value des tests sont supérieures à 5%. 
+# Donc on a l'homocédasticité.Ce qui n'est visuellement pas vraie pour ald
+##############################################################################
+
+# Nous considérerons donc log_ald pour stabiliser la variance
+
+```{r}
+diff1.log_ald <- diff(log_ald) # Elimination de la tendance
+plot(diff1.log_ald)
+```
+
+# La série sans tendance présente une saisonnalité
+
+```{r}
+# La saisonnalité est de 12 mois
+diff12.diff1.log_ald <- diff(diff1.log_ald, 12) 
+plot(diff12.diff1.log_ald)
+```
+
+# La série log_ald n'a désormais plus ni tendance ni saisonnalité.
+# Nous effectuerons le test ADF sur cette dernière
+
+```{r}
+require(urca)
+adf <- ur.df(diff12.diff1.log_ald , lags = 8, type = 'trend')
+summary(adf)
+```
+
+# 8 est le premier retard significatif
+# Considérant le test ADF, il faut passer du type trend au type drift
+
+```{r}
+adf <- ur.df(diff12.diff1.log_ald , lags = 8, type = 'drift')
+summary(adf)
+```
+
+# D'après l'ADF, il faut passer au type 'none', c'est-à-dire au modèle sans tendance ni dérive (drift)
+
+```{r}
+adf <- ur.df(diff12.diff1.log_ald , lags = 8, type = 'none')
+summary(adf)
+```
+
+
+# On rejette H0. La série estvintégrée d'ordre 0 I(0). Elle donc stationnaire.
+
+##########################################################################
+# AUTRE FACON DE RECUPERER L'ELEMENT ALEATOIRE DANS LA SERIE
+# ON DECOMPOSE LA SERIE
+##########################################################################
+
+# Si la variabilité de la série augmente avec le temps, l'argument type de la fonction decompose() reçoit 'multiplicative'. Sinon, il reçoit 'additive'. On peut passer d'une série multiplicative à une série additive en lui appliquant la fonction log.
+
+# La série Aipassengers est multiplicative
+
+```{r}
+decomp_ald <- decompose(ald, type = 'multiplicative')
+plot(decomp_ald)
+```
+
+
+# On obtiendra le même résultat avec log-ald
+
+```{r}
+decomp_log_ald <- decompose(log_ald, type = 'additive')
+plot(decomp_log_ald)
+```
+
+# Nous cherchons à étudier la stationnarité de l'erreur random
+
+```{r}
+ald.random <- decomp_ald$random
+ald.random
+```
+
+# al.random contient des NA. Eliminons-les
+
+```{r}
+ald.random.no_na <- na.omit(ald.random)
+ald.random.no_na
+```
+```{r}
+adf.random <- ur.df(ald.random.no_na, lags = 2, type = 'trend')
+summary(adf.random)
+```
+
+# 2 est le premier retard sgnificatif.
+# passe au type 'drift'
+
+```{r}
+adf.random <- ur.df(ald.random.no_na, lags = 2, type = 'drift')
+summary(adf.random)
+```
+
+# les résidus de la série Airpassengers sont intégrés d'ordre 0 plus une constante. I(0)+C. Ils sont donc stationnaire. Même résultat qu'avec la série désaisonnalisée et sans tendance diff12.diff1.log_ald
+
+###########################################################################
+# Proposition de modèle pour la série stabilisée log-ald
+############################################################################
+
+
+```{r}
+acf(x = diff12.diff1.log_ald)
+```
+
+# On a une moyenne mobile d'ordre q = 1 
+# Cette moyenne mobile est également saisonnale d'ordre Q = 1
+
+```{r}
+pacf(diff12.diff1.log_ald)
+```
+
+# On obtient un AR d'ordre p = 1
+# Cet AR est également saisonnale d'ordre P = 1
+
+# D'après l'ACF et le PACF, on peut modéliser la série diff12.diff1.log_ald avec un modèle SARIMA(p=1, d=1, q=1)(P=1,D=1, Q=1)s ; s = 12, 
+
+```{r}
+library(forecast)
+model <- Arima(log_ald,
+               order = c(1,1,1),
+               seasonal = c(1,1,1))
+model
+```
+
+
+# Test de significativité des estimateurs du modèles
+
+```{r}
+library(caschrono)
+
+t_stat(model) # du packages caschrono 
+```
+
+
+
+```{r}
+diff1.ald <- diff(ald) # Elimination de la tendance
+plot(diff1.ald)
+```
+
+
+
+# Après une différence d'ordre 1, on constate que la série ne présente plus de tendance.
+# La série différenciée présente des fluctuations qui augmentent avec le temps. On peut d'emblée conclure à sa non stationnarité.
+
+# Vérifions cela avec ADF
+
+```{r}
+ald.df1 <- ur.df(diff1.ald, lags = 5, type = 'none')
+summary(ald.df1)
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

@@ -1,0 +1,150 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+![](traj_ARCH1.png)
+
+```{r}
+
+#install.packages("fGarch")
+library(fGarch)
+```
+
+```{r Simulation du modèle}
+spec.1=garchSpec(model=list(mu=5,omega=0.1,alpha=0.9,beta=0),rseed=397)
+# On simule 310 valeurs et on considère les 300 dernières
+archsim.1=garchSim(extended=TRUE,spec.1,n = 300,n.start=10)
+head(archsim.1,5)
+```
+
+```{r}
+plot.ts(archsim.1$garch)
+```
+
+La moyenne de GARCH est-elle 5?
+
+```{r}
+X <- archsim.1$garch
+T <- length(X)
+
+Z <- sqrt(T)*(mean(X)-5)/sd(X)
+
+
+#Si | Z | > t(T-1, 1-alpha/2)  alors on conclut que la moyenne de X n'est pas 5
+
+alpha <- 0.05
+p=1-alpha/2
+df <- length(X)-1 # 299
+t <- qt(p, df=300-1)
+```
+
+```{r}
+print(t)
+print(Z)
+```
+
+H0 : La moyenne est 5 \<--\> H1 : La moyenne est différente de 5
+
+| \| z \| = 0.08805895 \< t = 1.96793 ==\> On ne rejette pas H0
+
+```{r Visualisation du carré de la série centrée}
+
+plot.ts((archsim.1[,1] - 5)**2)
+```
+
+Test de stationnarité de la variance
+
+H0: La variance est stationnaire \<--\> H1 : La variance est non stationnaire
+
+```{r}
+# library("fpp2")
+```
+
+```{r}
+# load required libraries
+library(tidyverse)
+#library(fpp2) 
+library(forecast) 
+#library(tibbletime) 
+# library(tsbox) 
+# library(gridExtra) 
+# library(knitr)
+```
+
+Les epsilon_t ne sont corrélées mais sont dépendants
+
+Les x_t ne sont pas corrélées car sont des bruits blancs.
+
+```{r}
+
+Sd_garch <- sd(archsim.1$garch, na.rm = TRUE)
+Sd_eps <- sd(archsim.1$eps)
+print(Sd_garch**2)
+print(Sd_eps**2)
+```
+
+La stationnarité de la variance garch_t et z_t(eps_t)
+
+```{r}
+library(lmtest)
+```
+
+```{r}
+
+## generate a regressor
+x <- rep(c(-1,1), length(archsim.1$garch)/2)
+## generate heteroskedastic and homoskedastic disturbances
+err1 <- archsim.1$garch
+err2 <- archsim.1$eps
+## generate a linear relationship
+y1 <- 1 + x + err1
+y2 <- 1 + x + err2
+```
+
+H0 : la variable est stationnaire \<-\> H1 : La variable n'est pas stationnaire
+
+```{r}
+## perform Breusch-Pagan test
+bptest(y1 ~ x)
+bptest(y2 ~ x)
+```
+
+# INTERPRETATION
+
+# Si p-value \< 5% alors on rejette H0
+
+############################################################################## Il y stationnarité de la variance si *p-value \< seuil alpha*
+
+Dans notre cas, la variance de garch n'est pas stationnaire et celle de eps ne n'est pas stationnaire non plus
+
+```{r}
+acf(archsim.1$garch)
+```
+
+```{r}
+pacf(archsim.1$garch)
+```
+
+Test d'hétéroscédasticité conditionnelle
+
+H0: Il n'y a pas d'effet ARCH pour le garch \<-\> H1 : Il y a effet ARCH
+
+```{r}
+# install.packages('FinTS')
+library(FinTS)
+```
+
+```{r Effet ARCH pour epsilon_t}
+ArchTest(archsim.1[,1],lag=12)
+```
+
+p-value \< 5% . On rejette H0. Il y a donc un effet ARCH pour les garch
+
+```{r}
+ ArchTest(archsim.1[,3],lag=12)
+```
+
+p-value \> 0 : Il n'y a donc d'effet ARCH pour les z_t

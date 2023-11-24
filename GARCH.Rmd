@@ -1,0 +1,213 @@
+---
+title: "R Notebook"
+output: html_document
+---
+
+**Simulation et estimation d'un GARCH(2,1)**
+
+D'abord, nous simulons 420 observations suivant le modèle:
+
+y(t) = 2+ σ(t) z(t)
+
+σ²(t) = 0.09 + 0.15 epsilon²(t-1) + 0.3 epsilon²(t-2) 0.4 σ²(t-1)
+
+```{r}
+ require(FinTS)
+library(fGarch)
+```
+
+```{r}
+
+spec=garchSpec(model=list(mu=2,omega=.09,alph=c(.15,.3),beta=.4),rseed=9647)
+var.margi=0.09/(1-0.15-0.3-0.4)
+y=garchSim(spec,n=420,extended=TRUE)
+y1=y[21:420,1]
+```
+
+```{r}
+y
+```
+
+```{r Chronogramme du modèle}
+
+plot.ts(y1,xlab='temps')
+
+```
+
+```{r}
+
+mu =2
+epsilon <- y1 - mu
+```
+
+```{r Nullité de la moyenne du processus epsilon}
+
+# epsilon = y1 - mu
+T <- length(y1)
+mu <- 2
+eps <- sqrt(T)*(mean(y1)-mu)/sd(y1)
+
+
+#Si | eps | > t(T-1, 1-alpha/2)  alors on conclut que la moyenne de X n'est pas 5
+
+alpha <- 0.05
+p=1-alpha/2
+df <- length(X)-1 # 299
+t <- qt(p, df= T-1)
+```
+
+```{r}
+print(eps)
+print(t)
+```
+
+\| eps \| \< t ==\> La moyenne des epsilon_t est donc nulle
+
+```{r}
+
+## generate a regressor
+x <- rep(c(-1,1), length(y1)/2)
+## generate heteroskedastic and homoskedastic disturbances
+err1 <- y1
+err2 <- epsilon
+## generate a linear relationship
+y1 <- 1 + x + err1
+y2 <- 1 + x + err2
+
+```
+
+```{r}
+library(lmtest)
+```
+
+```{r}
+## perform Breusch-Pagan test
+bptest(y1 ~ x)
+bptest(y2 ~ x)
+```
+
+p-value \> 5% Donc la variance des epsilon_t est constante
+
+Les autocorrélations
+
+```{r}
+acf(epsilon)
+```
+
+Les autocorrélations sont nulles.
+
+**Normalité du processus**
+
+```{r}
+shapiro.test(epsilon)
+```
+
+p-value \> 5% donc les epsilon(t) sont non normales
+
+**Test de l'effet GARCH**
+
+```{r}
+require(FinTS)
+```
+
+```{r}
+ ArchTest(epsilon, lags = 2)
+```
+
+H0: Il n'y a pas d'effet ARCH pour le epsilon_t \<-\> H1 : Il y a effet ARCH
+
+p-value \< 5% il y a un effet GARCH
+
+La série y1-2 (epsilon) est donc modélisable par un GARCH (p,q)
+
+Pour déterminer p et q, on détermine les ordres max(p,q) et q de l'ARMA epsilon²
+
+```{r }
+
+eps_scared <- epsilon**2
+head(eps_scared, 5)
+```
+
+```{r}
+require(urca)
+```
+
+**Test de Dickey-Fuller sur eps_scared**
+
+```{r}
+plot(eps_scared)
+```
+
+```{r}
+df0 <- ur.df(y=eps_scared,lags=1,type='trend')
+summary(df0)
+```
+
+Le plus grand retard significatif est 1
+
+*On passe au modèle avec drift*
+
+```{r}
+df1 <- ur.df(y=eps_scared,lags=1,type='drift')
+summary(df1)
+```
+
+*Finalement, d'après le test de Dickey-Fuller, la série est intégrée d'ordre 0 augmentée d'une constante.*
+
+**Détermination des ordres p et q du modèle de "eps_scared"**
+
+```{r}
+acf(eps_scared)
+```
+
+eps_scared contient un MA(q) où q=2
+
+```{r}
+pacf(eps_scared)
+```
+
+eps_scared contient un AR(p) où p=2
+
+```{r bibliothèque de modélisation}
+library(forecast)
+```
+
+```{r Le modèle}
+model <- Arima(eps_scared,
+               order = c(2,0,0),
+               seasonal = c(0,0,0))
+model
+```
+
+```{r Package pour le test de significativité}
+library(caschrono)
+```
+
+```{r Test de significativité des paramètres}
+
+t_stat(model) # du packages caschrono 
+```
+
+```{r Test de significativité des paramètres}
+coeftest(model) # fonction du packages lmtest
+```
+
+***Finalement, eps_scared est un AR(2)***
+
+**Test de normalité des résidus**
+
+```{r}
+library(tseries)
+```
+
+```{r}
+
+jarque.bera.test(residuals(model))
+shapiro.test(residuals(model))
+```
+
+p-value \> 5% . On n'a pas bien la normalité des résidus.
+
+**Conclusion :** *eps_scared est donc un AR(2)*
+
+***Ainsi, on peut modéliser epsilon = y1 - 2 par un GARCH(1,0) i.e ARCH(1)***
